@@ -1,0 +1,354 @@
+---
+title: "FinalProject"
+author: "Team 10"
+date: "4/25/2022"
+header-includes:
+ \usepackage{amsbsy}
+ \usepackage{hyperref}
+ \newcommand{\blue}[1]{\textcolor{blue}{#1}}
+ \newcommand{\red}[1]{\textcolor{red}{#1}}
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#install.packages("magrittr")
+#library(magrittr)
+#install.packages("tidyverse")
+#install.packages("Rmagic")
+
+```
+
+# Introduction (Quang Du)
+
+Cardiovascular diseases are the number one cause of death globally, taking an estimated 17.9 million lives each year, amounting to 31% of all deaths worldwide. The United States alone ranked 4th in the world for the number of death dues to heart disease. Unfortunately, with our medical knowledge and technological advance, we're still unable to find a cure for coronary disease. The next best thing to do is configure models that can accurately predict who is more likely to encounter coronary diseases. Through trials and errors, our team came up with three models: Multiple Regression, Decisions tree, and Random forest. 
+
+During our research and experimenting with data, many questions aroused our curiosity. Such as which predictor/s are significant to our model? Which model is the best for accomplishing our goal amongst the created models? And which gender is more likely to develop coronary diseases? With that in mind, we designed our project in ways that'll satisfy these data questions. 
+
+  
+
+# About the Data (Quang Du)
+
+Totally 918 observations with 12 variables. 
+
+The attribute for each variable are as follow, with expected output in bracket: 
+
+(1) `Age`: age of the patient 
+
+(2) `Sex` [M: Male, F: Female] 
+
+(3) `ChestPainType` [TA: Typical Angina, ATA: Atypical Angina, NAP: Non-Anginal Pain, ASY: Asymptomatic] 
+
+(4) `RestingBP`: resting blood pressure (mm Hg)
+(5) `Cholesterol`: serum cholesterol (mm/dl) 
+(6) `FastingBS`: fasting blood sugar [1: if FastingBS > 120 mg/dl, 0: otherwise] 
+(7) `RestingECG`: resting electrocardiogram results [Normal: Normal, ST: having ST-T wave abnormality (T wave inversions and/or ST elevation or depression of > 0.05 mV), LVH: showing probable or definite left ventricular hypertrophy by Estes' criteria]
+(8) `MaxHR`: maximum heart rate achieved [between 60 and 202] 
+(9) `ExerciseAngina`: exercise-induced angina [Y: Yes, N: No] 
+(10) `Oldpeak`: oldpeak = ST [Numeric value measured in depression] 
+(11) `ST_Slope`: the slope of the peak exercise ST segment [Up: upsloping, Flat: flat, Down: downsloping] 
+
+Finally, the variable `HeartDisease` will be our response variable, with output of 1 meaning patient has heart disease and 0 for normal. This told us that our response variable is qualitative. Therefore moving forward, we will be using models that deal with classification problem. 
+
+# Multiple Logistic Regression (Ngoc Tran, Lac Tran)
+
+The goal of a multiple logistic regression is to find an equation that best predicts the probability of a value of the response variable as a function of the predictor variables. Once this equation is formed, we can use it to understand the functional relationship between the independent variables and the dependent variable, to try to understand what might cause the probability of the dependent variable to change.
+
+```{r, echo=FALSE}
+heart <- read.csv("C:/Users/qdthe/Desktop/heart.csv")
+heart$Sex = as.factor(heart$Sex)
+heart$ChestPainType = as.factor(heart$ChestPainType)
+heart$RestingECG = as.factor(heart$RestingECG)
+heart$ExerciseAngina = as.factor(heart$ExerciseAngina)
+heart$ST_Slope = as.factor(heart$ST_Slope)
+```
+
+```{r}
+heart.glm = glm(HeartDisease ~ ., family = "binomial", data = heart)
+summary(heart.glm)
+```
+We first fitted the model with full set of predictors. With the summary of the model, we can easily obtain the significant variable by observing the p-value in the last column. Any variable which has a p-value less than or equal to 0.05 is considered a significant variable. Therefore, there are 7 siginificant variables in this model, which are `Sex`, `ChestPainType`, `Cholesterol`, `FastingBS`, `ExerciseAngina`, `Oldpeak` and `ST_Slope`. Additionally, the AIC obtained here is 626.19. Next, we proceed to fit the model with only significant variables and derive the following summary of the coefficients:
+
+```{r}
+heart.glm2 = glm(HeartDisease ~ Sex + ChestPainType + Cholesterol + FastingBS + ExerciseAngina + Oldpeak + ST_Slope, family = "binomial", data = heart)
+summary(heart.glm2)$coefficient
+summary(heart.glm2)$aic
+```
+The summary of the second model shows that every predictor in this model is significant and the AIC here is 621.61, which is smaller than the value we got from fitting model with a full set of predictors. Therefore, we will proceed to use the 7 significant predictors for training and testing the data to find out the error rate. Also, our multiple logistic regression model formula with significant predictors would be:
+$$
+\begin{split}
+log(\frac{p(X)}{1-p(X)}) =&-0.481859+1.454586\cdot X_{SexM}-1.878771\cdot X_{ChestPainTypeATA}-1.706720\cdot X_{ChestPainTypeNAP}\\
+ & -1.458703\cdot X_{ChestPainTypeTA}-0.004124\cdot Cholesterol+1.193157\cdot FastingBS\\
+ & +0.991359\cdot X_{ExerciseAnginaY}+0.410094\cdot Oldpeak+1.443532\cdot X_{ST_SlopeFlat}-1.060365\cdot X_{ST_SlopeUp}
+\end{split}
+$$
+Note that among the significant predictors, `Sex`, `ChestPainType`, `ExerciseAngina` and `ST_Slope` are qualitative variables, so we will use dummy variables to represent them (e.g. $X_{SexM}, X_{ChestPainTypeATA},...$). Hence, we have $X_{\text{predictor category}}$ is 1 if the predictor is correctly categorized and is 0, otherwise. For example, 
+$$
+X_{SexM} = 
+\begin{cases}
+1 \quad\text{if patient is male}\\
+0 \quad\text{if patient is female}
+\end{cases}
+$$
+**Training and Testing**
+```{r,echo=FALSE}
+heart <- read.csv("C:/Users/qdthe/Desktop/heart.csv")
+```
+
+After loading in the data, the data is split into training data set and testing data set to allow easier manipulation to the data. 80% of the data is split into training data and the remaining 20% of the data lies in the testing data as shown below.
+
+```{r}
+set.seed(10) #set seed
+#Select 80% of the data for training data
+sample = sample.int(n = nrow(heart),size = round(.8*nrow(heart)),
+                    replace = FALSE)
+train = heart[sample,]
+test = heart[-sample,]
+#Multiple Logistic Regression on training data
+heart.glm.train= glm(HeartDisease~ Sex + ChestPainType + Cholesterol + FastingBS 
+                     + ExerciseAngina + Oldpeak + ST_Slope,
+                     family="binomial", 
+                     data= train)
+```
+
+After that, we proceed to calculate the training error rate and average MSE.
+
+```{r}
+#Creating Confusion Matrix on Train Data
+predict.train = predict.glm(heart.glm.train,type = "response")
+predict.hd.train = ifelse(predict.train < 0.5, "No Heart Disease","Yes Heart Disease")
+(conf.mat.train = table(predict.hd.train,train$HeartDisease))
+```
+Here, the probability of heart disease is classified into two categories. When the probability is higher than 50%, the prediction will be classified as having heart disease. On the other hand, the probability of having heart disease that is lower than 50% is an indication that there is no presence of heart failure. The training error rate obtained from the confusion matrix is 12.94%.
+
+```{r}
+cf=NA
+for(i in 1:10) {
+  set.seed(i) #set seed
+  #Select 80% of the data for training data
+  sample = sample.int(n = nrow(heart),size = round(.80*nrow(heart)),
+                    replace = FALSE)
+  train = heart[sample,]
+  test = heart[-sample,]
+
+  heart.glm= glm(HeartDisease~ Sex+ Age+ MaxHR+ Cholesterol+ ChestPainType,     
+                 family="binomial", data= train)
+  
+  predict.test = predict.glm(heart.glm,type = "response", newdata = test)
+  predict.hd.test = ifelse(predict.test< 0.5,"No Heart Disease","Yes Heart Disease")
+  
+  #Confustion Matrix
+  (conf.mat = table(predict.hd.test,test$HeartDisease))
+
+  #Testing Error Rate
+  cf[i]= (conf.mat[1,2]+conf.mat[2,1])/sum(conf.mat)
+}
+cf
+#Average of all test error rates
+mean(cf)
+
+```
+When the calculation for the test error rate is repeated 10 times, with an 80-20% split for the training data and testing data, the test error rates came out differently each time. The average calculated for all ten test error rates is 20.60%, which is higher than the training error rate. This is as expected because the training data set tends to perform better than the testing data set. Nonetheless, when looking at the different test error rates obtained, they appear to have quite low accuracy and high variance among each other. This indicates that a better model should be used for prediction. 
+
+# Classification Tree Model (Jinangkumar Shah)
+
+The fundamental difficulty with logistic regression is accurately interpreting the data, whereas decision trees are easy to comprehend. Ease of Decision Making is enhanced with decision trees. Decision trees, unlike logistic regression, are pruned to avoid overfitting. For the classification tree, we'll use `HeartDisease` as our response variable and all other variables as our predictors. This is the formula we will use for the classification tree:  
+\begin{align*}
+& \hat{HeartDisease} \sim Age + Sex + ChestPainType + RestingBP + Cholesterol +FastingBS + RestingECG \\
+& + MaxHR + ExerciseAngina + Oldpeak + ST\_Slope
+\end{align*}
+
+```{r,echo=FALSE}
+heart <- read.csv("C:/Users/qdthe/Desktop/heart.csv")
+```
+
+Now we use the training data to create a decision tree:
+
+```{r, warning=FALSE, echo=FALSE}
+library(tree)
+set.seed(10)
+sample = sample(nrow(heart), round(nrow(heart)*.80))
+train = heart[sample,]
+test = heart[-sample,]
+```
+
+```{r, fig.align = 'center', out.width= "80%", warning=FALSE}
+#set.seed(10)
+tree.heart = tree(as.factor(HeartDisease)~., data = train)
+plot(tree.heart)
+text(tree.heart, pretty = 1)
+summary(tree.heart)
+```
+For our tree, `FastingBS`, `Oldpeak`, `Age`, `Cholesterol`, and `MaxHR` are used in this tree. We have a residual mean deviance of `0.8884` and a misclassification error rate of `20.03%`. With 10 terminal nodes. we will evaluate the performance of our tree by using the testing set of our data. First, we will repeatedly calculating the test error rate 10 times with different subsets of training and testing data and then find the mean value.
+
+```{r, warning=FALSE}
+mse.unprune = NA
+for (i in 1:10) {
+  set.seed(i)
+  sample = sample(nrow(heart), round(nrow(heart)*.80))
+  train = heart[sample,]
+  test = heart[-sample,]
+  tree.heart = tree(as.factor(HeartDisease)~., data = train)
+  tree.pred = predict(tree.heart, test, type = 'class')
+  table(tree.pred, test$HeartDisease)
+  test.matrix = table(tree.pred, test$HeartDisease)
+  mse.unprune[i] = (test.matrix[2] + test.matrix[3])/sum(test.matrix)
+}
+mse.unprune
+mean(mse.unprune)
+```
+After iterating 10 times we get mean error to be $0.210326 \approx$ `21.03%` and conversely an accuracy rate of `79.97%`. With this accuracy rate, our tree performs alright in predicting if a patient may have heart disease or not. 
+
+## Pruning Classification Tree
+
+It is better to prune our tree and lower the number of nodes to avoid overfitting and have a better interpretation out of the tree. 
+
+```{r, warning = FALSE, message = FALSE, fig.align = 'center', out.width= "85%",}
+set.seed(10)
+cv.heart = cv.tree(tree.heart, FUN = prune.misclass)
+prune5 = prune.misclass(tree.heart, best = 5)
+par(mfrow=c(1,2))
+plot(cv.heart$size, cv.heart$dev, type = "b")
+plot(prune5); text(prune5, pretty = 0)
+```
+
+Pruning decision trees minimizes their size by deleting sections of the tree that don't have enough ability to categorize instances. From the plot on the left hand side, it appears the optimal tree size would be 5 since it corresponds the smallest cross-valication error. With 5 terminal nodes, our pruned tree is left with `Oldpeak`, `MaxHR`, and `Cholesterol` variables. Therefore, these predictors will be considered significant in our decision tree model.
+
+To evaluate the performance of the pruned tree, we will use the same approach as for the unpruned tree, which is repeatedly calculating the test error rate 10 times with different subsets of training and testing data and find the average. 
+
+```{r, echo = FALSE, warning=FALSE}
+
+mse.prune = NA
+for (i in 1:10) 
+{
+  set.seed(i)
+  sample = sample(nrow(heart), round(nrow(heart)*.80))
+  train = heart[sample,]
+  test = heart[-sample,]
+  prune10 = prune.misclass(tree.heart, best = 5)
+  prune.pred = predict(prune10, test, type = "class")
+  prune.table = table(prune.pred, test$HeartDisease)
+  mse.prune[i] = (prune.table[2] + prune.table[3])/(sum(prune.table))
+}
+mse.prune
+mean(mse.prune)
+```
+After 10 iterations, we obtained all 10 MSEs with the same value of `0.2054348`. Hence, the average MSE is `20.54%`, which is slightly better than what we had initially with the unpruned tree. We can affirm that tree with 5 nodes is performing better in predicting heart diseases. 
+
+## Random Forest (Han Hoang)
+
+Previously, we can see that the decision trees can possibly give lower prediction accuracy and higher variance every time we fit a classification tree. To tackle these issues, we decided to use random forest approach to analyze the data and obtain the test MSE. Random forests first construct B = 500 large un-pruned trees, and each time a tree split is considered, it picks a random subset of $m = \sqrt{p}$, which is approximately 3 predictors from the full set of 11 predictors. This is an improvement over bagging via decorrelation, hence stabilizing the variance of the estimate. Finally, the final prediction is determined by counting the majority vote across all B trees since we are working on a classification task. Similar to the classification tree, the form of the random forest model is:
+$$HeartDisease\sim Age+Sex+ChestPainType+RestingBP+Cholesterol+FastingBS$$
+$$+RestingECG+MaxHR+ExerciseAngina+Oldpeak+ST\_Slope$$
+
+```{r, include=FALSE}
+library(randomForest)
+```
+
+
+```{r,}
+set.seed(10)
+rf.model = randomForest(as.factor(HeartDisease)~., 
+                         data = heart,
+                         mtry = sqrt(11),
+                         importance = TRUE)
+rf.model
+```
+With random forests, we attain an Out-of-bag (OOB) estimate of error rate of 12.85%. Here, OOB error rate is the mean prediction error on each training sample $x_i$, using only the trees that did not have $x_i$ in their bootstrap sample. Figure 1 shows that OOB error rate (black line) is stabilized with an increase in the number of trees. 
+
+```{r, echo=FALSE,out.width= "70%", fig.cap="Number of trees vs. OOB error rate", fig.align="center"}
+plot(rf.model)
+```
+
+```{r, echo=FALSE,out.width= "70%", fig.cap="Variable Importance Measurement", fig.align="center"}
+varImpPlot(rf.model)
+```
+
+
+In terms of variable importance measurement, we use `varImpPlot()` function to determine the importance of each variable. Note that the larger the value of DecreaseGini, the more important that variable is. Therefore, from the *MeanDecreaseGini* plot, it is visible that the most important variables is `ST_Slope`, followed by `ChestPainType`, `Cholesterol`, `MaxHR` and `Oldpeak`. These high-ranking predictors appear to be quite similar to those important predictors in the decision tree. In particular, the pruned tree picks `Cholesterol`, `MaxHR` and `Oldpeak` as the most important variables.
+
+
+```{r}
+MSE = rep(0,10)
+for (i in 1:10){
+  set.seed(i)
+  train = sample.int(n = nrow(heart),size = round(.8*nrow(heart)),replace = FALSE)
+  Heart.train = heart[train,]
+  Heart.test = heart[-train,]
+  rf.model = randomForest(as.factor(HeartDisease)~., 
+                         data = Heart.train,
+                         mtry = sqrt(11),
+                         importance = TRUE)
+  rf.yhat = predict(rf.model, newdata = Heart.test, type = "class") 
+  (conf.mat = table(rf.yhat, Heart.test$HeartDisease))
+  MSE[i] = (conf.mat[1,2]+conf.mat[2,1])/sum(conf.mat) 
+}
+MSE
+mean(MSE)
+
+```
+
+Finally, we randomly divide the dataset using 80/20 split to train the model on the 80% training data, and record the test error rate on left out 20% testing data. After 10 iterations of training and testing, we obtained an average test MSE of 0.1342 (13.42%). Notably, this is a better rate than the results obtained from the other two models.
+
+## Performance evaluation
+
+| Model | Test error |
+|-------|------------|
+| Multiple Linear Regression | 20.60% |
+| Decision Tree | 20.54% |
+| Random Forest | 13.42% |
+
+After obtaining the MSE of all three models, we can conclude that Multiple Linear Regression has the largest error rate of 20.60%, followed by Decision Trees with MSE of 20.54%. Finally, Random Forests have the best test error rate of 13.42%. 
+
+## Heart Failure by gender (Seonjae Baek)
+
+
+In addition to the important variables, we want to explore the dataset further to see whether male or female patients have a higher chance of heart failure. Hence, we proceed to fit a logistics model with `HeartDisease` as response and `Sex` as predictor to determine which gender has a higher risk of heart disease. Our initial model formula would be:
+$$
+P(x) = 
+\begin{cases}
+\frac{exp(\beta_0 + \beta_1)}{(1+exp(\beta_0+\beta_1))} \quad\text{if Male}
+\\
+\\
+\frac{exp(\beta_0)}{(1+exp(\beta_0))} \quad\text{if Female}
+\\
+\end{cases}
+$$
+```{r, echo=FALSE}
+#install.packages("ggplot2")
+heart <- read.csv("C:/Users/qdthe/Desktop/heart.csv")
+```
+```{r}
+model = glm(HeartDisease ~ Sex, family = "binomial", data = heart)
+```
+
+```{r,echo=FALSE}
+matrix_coef <- summary(model)$coefficients 
+matrix_coef
+```
+After fitting the model, we obtain that $\beta_0 = -1.0508$ and $\beta_1 = 1.5904 > 0$. This means there is a higher chance of heart failure in male patients. With this data, we can now calculate the probability of male and female patients having heart disease in the data set.
+$$
+P(x) = 
+\begin{cases}
+\frac{exp(-1.0508 + 1.5904)}{(1+exp(-1.0508+1.5904))} = 0.6317 \quad\text{if Male}
+\\
+\\
+\frac{exp(-1.0508)}{(1+exp(-1.0508))}=0.2591 \quad\text{if Female}
+\\
+\end{cases}
+$$
+The result shows that there is a 63.17% chance of male patients having heart diseart and the rate is much lower for female patients, which is 25.91%. These data can also be visualized in the following figure.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, out.width= "50%", fig.align="center"}
+heart$Sex<-as.factor(heart$Sex)
+levels(heart$Sex)<-c("Female","Male")
+heart$HeartDisease<-as.factor(heart$HeartDisease)
+levels(heart$HeartDisease)<-c("No", "Yes")
+library(ggplot2)
+ggplot(heart,aes(x=Sex,fill=HeartDisease,color=HeartDisease)) + stat_count(width=0.5) + 
+labs(x = "Gender",y = "Number", title = "Heart Disease by Gender") + theme(plot.margin = margin(t=10, r=10, b=10, l=10))
+```
+
+# Conclusion (Quang Du)
+
+In conclusion, out of the three models above, Random Forest is our best model for predicting if the patient has heart disease because it has the lowest MSE of 13.42%. Unfortunately, we did not have time to do a neural network model because it would be interesting to see what MSE that model would yield. Regarding significant predictors, we determined predictors ```Oldpeak```, ```ChestPainType```, ```Cholesterol```, and ```MaxHR``` to be the best indicator to determine if someone has heart disease since these four repeatedly appear in all three of our models. While working on the data, our group also inferred that males are almost three times more likely to have heart disease than females. Further research suggests this is also one of the significant factors in contributing to females having a life expectancy of five years longer than guys on average. 
